@@ -192,7 +192,7 @@ If you use this research or the experimental setup:
 ```
 repo4agent: Agent-Native Repository Design
 Empirical comparison across 40 experiment runs, 10 tasks, claude-haiku-4-5-20251001
-https://github.com/[your-username]/repo4agent
+https://github.com/pinkbubblebubble/repo4agent
 2026
 ```
 
