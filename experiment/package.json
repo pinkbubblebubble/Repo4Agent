@@ -1,0 +1,18 @@
+{
+  "name": "experiment",
+  "version": "1.0.0",
+  "description": "Experiment harness for agent-native vs traditional repo comparison",
+  "main": "run.ts",
+  "scripts": {
+    "run": "ts-node run.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.36.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
