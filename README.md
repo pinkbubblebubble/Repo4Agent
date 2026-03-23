@@ -2,15 +2,25 @@
 
 > Repositories designed for AI agents, not humans.
 
-**Live demo**: [demo/index.html](demo/index.html)
-**Full report**: [reports/report_en.md](reports/report_en.md) · [中文报告](reports/report_cn.md)
-**Deep analysis**: [reports/analysis_en.md](reports/analysis_en.md) · [中文分析](reports/analysis_cn.md)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
+![Runs: 40](https://img.shields.io/badge/experiment_runs-40-orange)
+![Pass Rate](https://img.shields.io/badge/pass_rate_improvement-%2B25pp-green)
 
 ---
 
-## The Finding
+## Overview
 
-We ran 40 controlled experiments comparing two structurally identical APIs — one in a traditional repository, one in an agent-native repository — and had Claude Haiku complete 10 coding tasks on each.
+Code repositories were designed for human navigation: layered folders, prose READMEs, monolithic controllers. AI agents that work in these repos read the wrong files, miss cross-module side effects, and commit to edits before understanding the full constraint space.
+
+**repo4agent** is an empirical investigation into what happens when you redesign a repository for the agent that will work in it — not the human who wrote it.
+
+Across **40 controlled experiment runs** covering 10 coding tasks, the agent-native structure improved test pass rate from **55% → 80% (+25 percentage points)**. On complex tasks with hidden constraints, the improvement was **0% → 100%**.
+
+---
+
+## The Core Finding
+
+The counter-intuitive result: agent-native repos use *more* tool calls, not fewer.
 
 | | Traditional | Agent-Native | Δ |
 |--|------------|--------------|---|
@@ -18,27 +28,25 @@ We ran 40 controlled experiments comparing two structurally identical APIs — o
 | Avg tokens | 189,518 | 300,779 | +58.7% |
 | **Test pass rate** | **55%** | **80%** | **+25pp** |
 
-More resources, dramatically better outcomes. The agent reads more — but reads *better-structured information* — and makes correct first-attempt implementations instead of repeatedly editing the wrong files.
+More resources, better outcomes. The mechanism isn't efficiency — it's **information quality per read**. Traditional agents read source code and infer intent. Agent-native agents read structured metadata and *know* intent.
 
-On complex tasks with hidden constraints (auth refresh, soft delete), agent-native achieved **100% vs 0%** — a complete reversal.
+The token cost per **correct implementation**: 339K (traditional) vs 371K (agent-native) — only 9.3% more expensive, while producing 45% more correct answers.
 
 ---
 
 ## What Is an Agent-Native Repository?
 
-A traditional repo is organized for human navigation: layered architecture, prose README, controllers that mix all operations.
-
-An agent-native repo adds a **metadata layer** tuned for how AI agents actually work:
+An agent-native repo adds a **metadata layer** alongside the existing source code. The code doesn't change. The structure changes.
 
 ```
 .agent/
-  MANIFEST.yaml     ← Capability index: handler, side_effects, known_issues per operation
-  INVARIANTS.md     ← Non-obvious constraints + pre-annotated bugs with exact fix locations
-  IMPACT_MAP.yaml   ← "Changing X requires also changing Y" declarations
-AGENT.md            ← Machine-optimized entry point: capability table + known issues
+  MANIFEST.yaml      ← Every capability: handler path, side effects, known issues, test coverage
+  INVARIANTS.md      ← Non-obvious constraints + pre-annotated bugs with exact fix locations
+  IMPACT_MAP.yaml    ← "Changing X requires also changing Y" — converts unknown unknowns to known
+AGENT.md             ← Machine-optimized entry: "Read INVARIANTS.md before touching anything"
 src/
   user/
-    user.create.handler.ts   ← One file per operation (not one controller for all)
+    user.create.handler.ts    ← One file per operation
     user.contract.ts
     user.test.ts
   auth/
@@ -48,13 +56,48 @@ src/
 
 ### Why It Works
 
-Three mechanisms account for the +25pp improvement:
+**Premature commit is the primary failure mode.** Traditional agents read 4–7 files, decide "that's enough," and start editing — often the wrong files. Agent-native agents read 13–19 files first, then make correct targeted edits. `AGENT.md` enforces this by opening with a mandatory pre-read instruction.
 
-1. **Front-loaded knowledge** — `AGENT.md` forces the agent to read constraints before touching any code. Traditional agents "prematurely commit" after reading only 4–7 files; agent-native agents read 13–19 files first, then make correct targeted edits.
+**Side effects are the #1 unknown unknown.** `MANIFEST.yaml` declares what each operation writes, reads, and affects beyond its return value. Without this, an agent fixing a delete handler won't know it also needs to invalidate sessions.
 
-2. **Unknown unknowns → known unknowns** — `MANIFEST.yaml`'s `side_effects` field and `IMPACT_MAP.yaml` tell the agent which other files must change when it edits any given file. Traditional agents fix the delete handler; they miss the session invalidation. Agent-native agents don't.
+**Structure is a silent instruction.** Domain-organized source (`src/user/`, `src/auth/`) with semantic file names cues the agent to create new isolated files rather than pile into an existing controller — 4× more new file creation in agent-native runs.
 
-3. **Structure as instruction** — Domain-organized `src/user/`, `src/auth/` with semantic file names (`user.delete.handler.ts`) cues the agent to create new isolated files rather than pile into an existing controller.
+---
+
+## Results by Task
+
+| Task | Traditional | Agent-Native | Δ |
+|------|------------|--------------|---|
+| A: PATCH email endpoint | 50% | 100% | +50pp |
+| B: Fix sessions on delete | 50% | 100% | +50pp |
+| C: Input validation | 0% | 0% | — |
+| D: GET /users list | 100% | 100% | — |
+| E: PATCH password | 100% | 50% | −50pp |
+| F: Session expiry fix | 100% | 100% | — |
+| G: GET /users?email search | 100% | 50% | −50pp |
+| **H: POST /auth/refresh** | **0%** | **100%** | **+100pp** |
+| I: Request logging | 50% | 100% | +50pp |
+| **J: Soft delete** | **0%** | **100%** | **+100pp** |
+
+Tasks E and G are intentional counter-examples: agent-native *underperformed* on simple, well-scoped tasks. Over-reading metadata causes over-engineering. **Agent-native advantage scales with task hidden complexity** — this informed the design of `INVARIANTS.md`: keep it sparse, document only non-obvious constraints.
+
+---
+
+## The `/init-agent-repo` Skill
+
+The research produced a Claude Code skill that generates the agent-native metadata layer for any existing codebase automatically.
+
+**Install**: Copy `skill/init-agent-repo/SKILL.md` to `~/.claude/skills/init-agent-repo/SKILL.md`, then restart Claude Code.
+
+**Usage**: Run `/init-agent-repo` in any project.
+
+The skill explores your codebase and generates:
+- `AGENT.md` with a capability table and known issues
+- `.agent/MANIFEST.yaml` with side effects per operation
+- `.agent/INVARIANTS.md` with active violations and non-obvious constraints
+- `.agent/IMPACT_MAP.yaml` with cross-module impact chains
+
+Priority order for maximum impact: **INVARIANTS.md** > **MANIFEST.yaml** (`side_effects`) > **IMPACT_MAP.yaml** > domain structure + semantic naming.
 
 ---
 
@@ -62,142 +105,70 @@ Three mechanisms account for the +25pp improvement:
 
 ```
 repo4agent/
-├── traditional-repo/        # Standard Express.js + TypeScript API
-│   ├── src/
-│   │   ├── controllers/     # userController.ts, authController.ts
-│   │   ├── models/
-│   │   ├── routes/
-│   │   ├── middleware/
-│   │   └── utils/
-│   └── tests/
+├── traditional-repo/       # Standard Express.js + TypeScript API
+│   └── src/controllers/    # userController.ts, authController.ts (mixed operations)
 │
-├── agent-native-repo/       # Same API, restructured for agents
-│   ├── .agent/
-│   │   ├── MANIFEST.yaml
-│   │   ├── INVARIANTS.md
-│   │   ├── IMPACT_MAP.yaml
-│   │   └── TASK_TEMPLATES/
+├── agent-native-repo/      # Same API, restructured for agents
+│   ├── .agent/             # MANIFEST.yaml, INVARIANTS.md, IMPACT_MAP.yaml
 │   ├── AGENT.md
-│   ├── src/
-│   │   ├── user/            # user.create.handler.ts, user.contract.ts, user.test.ts
-│   │   ├── auth/
-│   │   └── _shared/
-│   └── tests/
+│   └── src/user/, src/auth/  # Domain-organized, one file per operation
 │
 ├── experiment/
-│   ├── run_experiment.py    # Main experiment runner (uses claude CLI)
-│   ├── parse_stream.py      # Parses claude stream-json output, counts tool calls
-│   ├── summarize.py         # Aggregates results → summary.json
-│   └── results/
-│       ├── raw_results.jsonl  # 40 raw runs (one JSON per line)
-│       └── summary.json       # Aggregated metrics + hypothesis evaluations
+│   ├── run_experiment.py   # Runs tasks via claude CLI (--disallowedTools Bash)
+│   ├── parse_stream.py     # Parses stream-json output, counts tool calls
+│   ├── summarize.py        # Aggregates raw_results.jsonl → summary.json
+│   └── results/            # Raw data: 40 runs, all metrics
 │
 ├── reports/
-│   ├── report_en.md         # Full experiment report
-│   ├── report_cn.md         # 中文实验报告
-│   ├── analysis_en.md       # Deep analysis: 6 mechanisms
-│   └── analysis_cn.md       # 深度分析
+│   ├── report_en.md        # Full experiment report
+│   ├── report_cn.md        # 中文报告
+│   ├── analysis_en.md      # Deep analysis: 6 mechanisms
+│   └── analysis_cn.md      # 深度分析
 │
-└── demo/
-    └── index.html           # Interactive demo page
+├── skill/
+│   └── init-agent-repo/
+│       └── SKILL.md        # Claude Code skill
+│
+└── demo/index.html         # Interactive demo
 ```
 
 ---
 
 ## Reproducing the Experiment
 
-### Prerequisites
-
-- [Claude Code](https://claude.ai/code) installed and authenticated (`claude --version`)
-- Python 3.8+
-- Node.js 18+
-
-### Setup
+**Prerequisites**: Claude Code (`claude --version`), Python 3.8+, Node.js 18+
 
 ```bash
-# Install dependencies for both repos
 cd traditional-repo && npm install && cd ..
 cd agent-native-repo && npm install && cd ..
-```
 
-### Run
-
-```bash
 cd experiment
-
-# Run all 10 tasks × 2 repos × 2 runs = 40 total
-python3 run_experiment.py
-
-# Summarize results
-python3 summarize.py
+python3 run_experiment.py   # Appends to results/raw_results.jsonl
+python3 summarize.py        # Prints summary table + writes summary.json
 ```
 
-Results append to `experiment/results/raw_results.jsonl`. Each line contains:
-- `repo_type`, `task_id`, `run_number`
-- Tool call counts: `read`, `glob`, `grep`, `write`, `edit`, `total`
-- `input_tokens`, `output_tokens`, `total_tokens`, `cost_usd`
-- `tests_passed`, `failed_test_count`, `duration_ms`
+The experiment uses `--disallowedTools Bash` to force the agent to use discrete Read/Glob/Grep/Write/Edit operations — making tool call counts meaningful and reproducible.
 
-### Tasks
-
-| ID | Task | Type |
-|----|------|------|
-| A | Add `PATCH /users/:id/email` | Add feature |
-| B | Fix: user delete doesn't invalidate sessions | Fix bug |
-| C | Add input validation to `POST /users` | Add middleware |
-| D | Add `GET /users` list endpoint | Add feature |
-| E | Add `PATCH /users/:id/password` | Add feature |
-| F | Fix: sessions never expire | Fix bug |
-| G | Add `GET /users?email=` search | Add feature |
-| H | Add `POST /auth/refresh` | Add feature |
-| I | Add global request logging | Add middleware |
-| J | Change DELETE to soft delete + invalidate sessions | Add feature |
+Each result line in `raw_results.jsonl` contains: `repo_type`, `task_id`, `run_number`, tool call counts, token usage, `tests_passed`, `failed_test_count`, `duration_ms`.
 
 ---
 
-## The `/init-agent-repo` Skill
+## Further Reading
 
-The research produced a Claude Code skill that transforms any existing repository into an agent-native structure automatically.
-
-Install:
-```bash
-# The skill is at ~/.claude/skills/init-agent-repo/SKILL.md
-# Restart Claude Code, then invoke with:
-/init-agent-repo
-```
-
-The skill:
-1. Explores your codebase (entry points, handlers, models, tests)
-2. Identifies capabilities, side effects, cross-module dependencies, and non-obvious constraints
-3. Generates `AGENT.md`, `.agent/MANIFEST.yaml`, `.agent/INVARIANTS.md`, `.agent/IMPACT_MAP.yaml`
-
-Priority order for maximum impact: `INVARIANTS.md` > `MANIFEST.yaml` (side_effects) > `IMPACT_MAP.yaml` > domain structure.
-
----
-
-## Key Takeaways
-
-- **Fewer tool calls ≠ better** — agent-native uses 55% more tool calls but achieves 45% more correct implementations
-- **Tokens per correct answer**: 339K (traditional) vs 371K (agent-native) — only 9.3% more expensive per *correct* outcome
-- **The read-per-edit ratio** is a quality signal: failing runs cluster at 1.2–2.0 r/e; passing runs at 1.9–3.8+
-- **INVARIANTS.md** must stay sparse — information overload causes over-engineering on simple tasks (Tasks E, G: −50pp)
-- **Structure is the silent instruction** — file naming conventions and domain organization guide agent behavior without explicit rules
+- [Full Experiment Report](reports/report_en.md) — methodology, per-task breakdown, hypothesis evaluations
+- [Deep Analysis](reports/analysis_en.md) — 6 mechanisms: premature commit, missing edit problem, write ratio, token timing, information density, counter-examples
+- [中文报告](reports/report_cn.md) / [深度分析](reports/analysis_cn.md)
 
 ---
 
 ## Citation
 
-If you use this research or the experimental setup:
-
 ```
 repo4agent: Agent-Native Repository Design
-Empirical comparison across 40 experiment runs, 10 tasks, claude-haiku-4-5-20251001
+40-run empirical comparison, claude-haiku-4-5-20251001, 2026
 https://github.com/pinkbubblebubble/repo4agent
-2026
 ```
 
 ---
 
-## License
-
-MIT
+MIT License
