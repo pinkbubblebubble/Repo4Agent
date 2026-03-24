@@ -193,7 +193,7 @@ cp skill/init-agent-repo/SKILL.md ~/.claude/skills/init-agent-repo/SKILL.md
 - Python 3.8+，Node.js 18+
 
 ```bash
-cd traditional-repo && npm install && cd ..
+cd ablation/traditional && npm install && cd ../..
 cd agent-native-repo && npm install && cd ..
 ```
 
@@ -224,21 +224,26 @@ python3 summarize.py
 
 ```
 Repo4Agent/
-├── traditional-repo/          标准 Express.js + TypeScript（混合 controller）
-├── agent-native-repo/         相同 API，为 Agent 重新组织结构
+├── agent-native-repo/         AN-Refined — 最终推荐设计（5 个文件）
 │   ├── .agent/                MANIFEST · INVARIANTS · IMPACT_MAP · TEST_CONTRACTS
 │   ├── AGENT.md
 │   └── src/user/ · src/auth/  按领域组织，每个操作一个文件
+├── ablation/                  消融研究的支撑材料
+│   ├── traditional/           对照组：标准 Express.js + TypeScript
+│   ├── an-baseline/           AN-Baseline：4 文件设计（通过率 80%）
+│   ├── an-extended/           AN-Extended：11 文件设计（通过率 80%）
+│   └── README.md              说明各条件之间的差异
 ├── experiment/
 │   ├── run_experiment.py      实验运行器（claude CLI 子进程）
 │   ├── summarize.py           汇总 → summary.json
-│   └── results/               80 次原始运行 + 汇总数据
+│   ├── results/               80 次原始运行 + 汇总数据
+│   └── runs/                  实验期间使用的各任务仓库快照
 ├── reports/
 │   ├── report_en.md · report_cn.md
 │   └── analysis_en.md · analysis_cn.md
 ├── skill/
 │   └── init-agent-repo/SKILL.md
-└── docs/index.html            交互演示页（GitHub Pages）
+└── docs/                      GitHub Pages 演示 + 研究规划文档
 ```
 
 ---

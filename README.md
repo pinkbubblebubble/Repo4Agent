@@ -193,7 +193,7 @@ Restart Claude Code, then run `/init-agent-repo` in any project.
 - Python 3.8+, Node.js 18+
 
 ```bash
-cd traditional-repo && npm install && cd ..
+cd ablation/traditional && npm install && cd ../..
 cd agent-native-repo && npm install && cd ..
 ```
 
@@ -224,21 +224,26 @@ Results append to `experiment/results/raw_results.jsonl`.
 
 ```
 Repo4Agent/
-├── traditional-repo/          Standard Express.js + TypeScript (mixed controllers)
-├── agent-native-repo/         Same API, restructured for agents
+├── agent-native-repo/         AN-Refined — the final recommended design (5 files)
 │   ├── .agent/                MANIFEST · INVARIANTS · IMPACT_MAP · TEST_CONTRACTS
 │   ├── AGENT.md
 │   └── src/user/ · src/auth/  Domain-organized, one file per operation
+├── ablation/                  Supporting material for the ablation study
+│   ├── traditional/           Control group: standard Express.js + TypeScript
+│   ├── an-baseline/           AN-Baseline: 4-file design (80% pass rate)
+│   ├── an-extended/           AN-Extended: 11-file design (80% pass rate)
+│   └── README.md              Explains what changed between conditions
 ├── experiment/
 │   ├── run_experiment.py      Experiment runner (claude CLI subprocess)
 │   ├── summarize.py           Aggregates → summary.json
-│   └── results/               80 raw runs + aggregated data
+│   ├── results/               80 raw runs + aggregated data
+│   └── runs/                  Per-task repo snapshots used during runs
 ├── reports/
 │   ├── report_en.md · report_cn.md
 │   └── analysis_en.md · analysis_cn.md
 ├── skill/
 │   └── init-agent-repo/SKILL.md
-└── docs/index.html            Interactive demo (GitHub Pages)
+└── docs/                      GitHub Pages demo + research planning docs
 ```
 
 ---

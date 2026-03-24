@@ -1,4 +1,4 @@
-version: "1.0"
+version: "3.0"
 project: "user-management-api"
 stack: ["TypeScript", "Express", "Jest"]
 entry: "src/app.ts"
@@ -36,7 +36,7 @@ capabilities:
     side_effects: ["writes_user_store"]
     dependencies: ["_shared/db"]
     tests: "src/user/user.test.ts#delete"
-    known_issues: "Does not invalidate active sessions - see INV-002"
+    known_issues: "Does not invalidate active sessions — see INV-002 in INVARIANTS.md for step-by-step fix"
 
   auth.login:
     description: "Authenticate user, return session token"
