@@ -1,0 +1,185 @@
+# PATTERNS.yaml
+# Concrete code templates for this codebase. Copy, adapt, done.
+# One real example beats reading three existing files.
+# Update when a new pattern is established or an existing one changes.
+
+version: "2.0"
+
+# ── HOW TO USE ────────────────────────────────────────────────────────────────
+# Before writing any new code, find the matching pattern here.
+# The template reflects the exact conventions of this codebase.
+# Don't invent a new structure unless there is no matching pattern.
+# ─────────────────────────────────────────────────────────────────────────────
+
+patterns:
+
+  # ── New Handler ─────────────────────────────────────────────────────────────
+
+  new_handler:
+    use_when: "Adding a new operation (new route)"
+    file_naming: "<domain>.<operation>.handler.ts  e.g. user.update-email.handler.ts"
+    template: |
+      import { Request, Response } from 'express'
+      import { userStore } from '../_shared/db'   // or sessionStore
+      import { MyOperationInput } from './user.contract'
+
+      export const myOperation = async (req: Request, res: Response): Promise<void> => {
+        try {
+          const userId = req.userId  // injected by authMiddleware (protected routes only)
+          const { field } = req.body as MyOperationInput
+
+          // --- validate input ---
+          if (!field) {
+            res.status(400).json({ error: 'field is required' })
+            return
+          }
+
+          // --- lookup ---
+          const user = userStore.get(userId)
+          if (!user) {
+            res.status(404).json({ error: 'User not found' })
+            return
+          }
+
+          // --- mutate ---
+          userStore.set(userId, { ...user, field })
+
+          // --- respond (strip password) ---
+          const { password: _, ...safeUser } = userStore.get(userId)!
+          res.status(200).json(safeUser)
+        } catch (err) {
+          res.status(500).json({ error: 'Internal server error' })
+        }
+      }
+    key_conventions:
+      - "Always return early after res.status().json() — use 'return'"
+      - "Always strip password field before responding: const { password: _, ...safe } = user"
+      - "req.userId comes from authMiddleware — only available on protected routes"
+      - "Use 404 for missing resource, 400 for bad input, 401 for auth failures"
+
+  # ── New Contract Type ────────────────────────────────────────────────────────
+
+  new_contract:
+    use_when: "Adding input/output types for a new handler"
+    file: "src/user/user.contract.ts  (or auth.contract.ts for auth operations)"
+    template: |
+      export interface UpdateEmailInput {
+        email: string
+      }
+
+      export interface UpdateEmailOutput {
+        id: string
+        email: string
+        name: string
+        // never include password
+      }
+    key_conventions:
+      - "Input types end in 'Input', output types end in 'Output' or match the entity name"
+      - "Never include password in any output type"
+
+  # ── Register New Route ───────────────────────────────────────────────────────
+
+  new_route:
+    use_when: "Wiring a new handler into Express"
+    file: "src/app.ts"
+    insertion_point: "After the last existing route, before error handler"
+    template: |
+      // protected route (requires auth):
+      app.patch('/users/:id/email', authMiddleware, updateEmail)
+
+      // public route (no auth):
+      app.post('/auth/refresh', refreshToken)
+    imports_to_add: |
+      import { updateEmail } from './user/user.update-email.handler'
+    key_conventions:
+      - "Protected routes: always include authMiddleware as second argument"
+      - "Import handler at top of file with other handler imports"
+      - "After adding, update .agent/ROUTES.yaml"
+
+  # ── New Test Suite ──────────────────────────────────────────────────────────
+
+  new_test:
+    use_when: "Adding tests for a new handler"
+    file_naming: "Co-locate with handler: src/user/user.test.ts (add to existing) or new file"
+    template: |
+      describe('PATCH /users/:id/email', () => {
+        let token: string
+        let userId: string
+
+        beforeEach(async () => {
+          // create user and login to get token
+          const res = await request(app)
+            .post('/users')
+            .send({ email: 'test@example.com', password: 'secret', name: 'Test' })
+          userId = res.body.id
+
+          const loginRes = await request(app)
+            .post('/auth/login')
+            .send({ email: 'test@example.com', password: 'secret' })
+          token = loginRes.body.token
+        })
+
+        it('updates email successfully', async () => {
+          const res = await request(app)
+            .patch(`/users/${userId}/email`)
+            .set('Authorization', `Bearer ${token}`)
+            .send({ email: 'new@example.com' })
+
+          expect(res.status).toBe(200)
+          expect(res.body.email).toBe('new@example.com')
+          expect(res.body.password).toBeUndefined()  // never leak password
+        })
+
+        it('returns 401 without token', async () => {
+          const res = await request(app)
+            .patch(`/users/${userId}/email`)
+            .send({ email: 'new@example.com' })
+          expect(res.status).toBe(401)
+        })
+
+        it('returns 400 with missing email', async () => {
+          const res = await request(app)
+            .patch(`/users/${userId}/email`)
+            .set('Authorization', `Bearer ${token}`)
+            .send({})
+          expect(res.status).toBe(400)
+        })
+      })
+    key_conventions:
+      - "Each test suite: beforeEach creates fresh user + token (stores reset between tests? check db.ts)"
+      - "Always test the 401 unauthorized case for protected routes (INV-003)"
+      - "Always assert password is absent from response body (INV-001)"
+      - "Use supertest's request(app) — import from existing test files to see setup"
+
+  # ── Password Hashing ─────────────────────────────────────────────────────────
+
+  password_hash:
+    use_when: "Any time you store or compare a password"
+    template: |
+      import bcrypt from 'bcrypt'
+      const SALT_ROUNDS = 10
+
+      // hashing (on create/update):
+      const hashedPassword = await bcrypt.hash(plaintext, SALT_ROUNDS)
+
+      // comparing (on login):
+      const isValid = await bcrypt.compare(plaintext, storedHash)
+    key_conventions:
+      - "saltRounds must be >= 10 (INV-001)"
+      - "Never store plaintext, never return hash in response"
+
+  # ── Stripping Sensitive Fields ───────────────────────────────────────────────
+
+  strip_password:
+    use_when: "Any time you return a User object in a response"
+    template: |
+      // single user:
+      const { password: _, ...safeUser } = user
+      res.json(safeUser)
+
+      // array of users:
+      const safeUsers = users.map(({ password: _, ...u }) => u)
+      res.json(safeUsers)
+    key_conventions:
+      - "Use destructuring with rename trick: { password: _ } discards the field"
+      - "Apply this at the handler level, not in db.ts"

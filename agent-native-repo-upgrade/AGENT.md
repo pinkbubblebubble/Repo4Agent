@@ -1,62 +1,62 @@
-# AGENT ENTRY POINT — v2
-
-> **Protocol:** Read `.agent/COMMIT_PROTOCOL.md` BEFORE starting any task.
-> Update metadata AFTER completing any task. Stale metadata is worse than no metadata.
-
----
-
-## Quick Orient
-
-| Key | Value |
-|-----|-------|
-| Stack | TypeScript · Express.js · Jest |
-| Entry | `src/app.ts` |
-| Test | `npm test` |
-| Data | In-memory Maps (no external DB) |
+# AGENT.md
+# Stack: TypeScript · Express.js · Jest
+# Entry: src/app.ts | Test: npm test | Data: in-memory Maps
 
 ---
 
-## Step 1 — Find What You Need (zero grep needed)
+## Start here — what do you need?
 
-| You want to… | Go to |
-|---|---|
-| Find a specific file | `.agent/FILES.yaml` |
-| Find a route's handler | `.agent/ROUTES.yaml` |
-| Find all files related to a concept (auth, sessions…) | `.agent/CONCEPTS.yaml` |
-| Find which capability to modify | `.agent/MANIFEST.yaml` |
-| Know what constraints exist | `.agent/INVARIANTS.md` |
-| Know what a change will break | `.agent/IMPACT_MAP.yaml` |
-| Know what was changed recently | `.agent/CHANGELOG.agent.yaml` |
+**"What is currently working/broken?"**
+→ `.agent/STATUS.yaml`
+
+**"Where is the handler for route X?"**
+→ `.agent/ROUTES.yaml`
+
+**"Which file should I edit?"**
+→ `.agent/FILES.yaml`
+
+**"What must I not break?"**
+→ `.agent/INVARIANTS.md`
+
+**"What exactly does the test expect?"** ← read before writing code
+→ `.agent/TEST_CONTRACTS.yaml`
+
+**"How is code written in this codebase?"**
+→ `.agent/PATTERNS.yaml`
+
+**"What has changed recently?"**
+→ `.agent/CHANGELOG.agent.yaml`
+
+**"What will break if I change file X?"**
+→ `.agent/IMPACT_MAP.yaml`
+
+**"Where in the codebase is concept Y?"**
+→ `.agent/CONCEPTS.yaml`
 
 ---
 
-## Step 2 — Before You Edit
+## Before you write any code
 
-1. Read `.agent/INVARIANTS.md` — non-negotiable constraints
-2. Check `.agent/FILES.yaml` → the target file's `before_editing` block
-3. Check `.agent/IMPACT_MAP.yaml` → what your target file affects
+1. Read `STATUS.yaml` — know what's broken before you start
+2. Read `TEST_CONTRACTS.yaml` for your target capability — write to match it
+3. Check `FILES.yaml` for the target file's `before_editing` block
+4. Check `IMPACT_MAP.yaml` for blast radius
 
----
+## After you finish
 
-## Step 3 — After You Edit (mandatory)
-
-Follow `.agent/COMMIT_PROTOCOL.md` exactly.
-Skipping this makes the metadata stale for the next agent.
+→ Follow `.agent/COMMIT_PROTOCOL.md` — task is not done until metadata is updated
 
 ---
 
-## Capability Index
+## Capability map
 
-| Capability | Handler | Tests |
-|---|---|---|
-| user.create | `src/user/user.create.handler.ts` | `src/user/user.test.ts#create` |
-| user.get | `src/user/user.get.handler.ts` | `src/user/user.test.ts#get` |
-| user.update | `src/user/user.update.handler.ts` | `src/user/user.test.ts#update` |
-| user.delete | `src/user/user.delete.handler.ts` | `src/user/user.test.ts#delete` |
-| user.list | `src/user/user.list.handler.ts` | `src/user/user.test.ts#list` |
-| auth.login | `src/auth/auth.login.handler.ts` | `src/auth/auth.test.ts#login` |
-| auth.logout | `src/auth/auth.logout.handler.ts` | `src/auth/auth.test.ts#logout` |
-
-## Known Issues
-
-- **INV-002**: `user.delete` does not invalidate active sessions → `src/user/user.delete.handler.ts`
+| Capability | Route | Handler | Status |
+|---|---|---|---|
+| user.create | POST /users | src/user/user.create.handler.ts | ✅ |
+| user.get | GET /users/:id | src/user/user.get.handler.ts | ✅ |
+| user.list | GET /users | src/user/user.list.handler.ts | ✅ |
+| user.update | PATCH /users/:id | src/user/user.update.handler.ts | ✅ |
+| user.delete | DELETE /users/:id | src/user/user.delete.handler.ts | ❌ INV-002 |
+| auth.login | POST /auth/login | src/auth/auth.login.handler.ts | ✅ |
+| auth.logout | POST /auth/logout | src/auth/auth.logout.handler.ts | ✅ |
+| auth.refresh | POST /auth/refresh | src/auth/auth.refresh.handler.ts | ✅ |

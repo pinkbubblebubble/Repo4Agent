@@ -1,0 +1,72 @@
+# STATUS.yaml — Current State of Every Capability
+# Read this first to know what's working, broken, or missing.
+# Saves you from discovering broken things mid-task.
+# Update after every task via COMMIT_PROTOCOL.md.
+
+version: "2.0"
+
+# status values: working | broken | partial | not_implemented | deprecated
+
+capabilities:
+
+  user.create:
+    status: working
+    route: "POST /users"
+    notes: ~
+
+  user.get:
+    status: working
+    route: "GET /users/:id"
+    notes: ~
+
+  user.list:
+    status: working
+    route: "GET /users"
+    notes: "email filter works"
+
+  user.update:
+    status: working
+    route: "PATCH /users/:id"
+    notes: ~
+
+  user.delete:
+    status: broken
+    route: "DELETE /users/:id"
+    broken_because: "Does not invalidate sessions after delete — INV-002"
+    fix_location: "src/user/user.delete.handler.ts"
+    fix_requires: "sessionStore.deleteByUserId() in src/_shared/db.ts (method missing)"
+
+  auth.login:
+    status: working
+    route: "POST /auth/login"
+    notes: ~
+
+  auth.logout:
+    status: working
+    route: "POST /auth/logout"
+    notes: ~
+
+  auth.refresh:
+    status: working
+    route: "POST /auth/refresh"
+    notes: "Token rotation enforced"
+
+  input_validation:
+    status: not_implemented
+    notes: >
+      Global validation middleware not added. Each handler does minimal field checks.
+      See CONCEPTS.yaml#input_validation for context on why this failed in experiments.
+
+  request_logging:
+    status: not_implemented
+    notes: "No global request logger. Add as middleware in src/app.ts if needed."
+
+# ── Test Suite Health ──────────────────────────────────────────────────────────
+
+tests:
+  last_run: ~   # update after running npm test
+  passing: ~
+  failing: ~
+  known_failing:
+    - capability: user.delete
+      reason: "INV-002 — post-delete session test will fail until fix is applied"

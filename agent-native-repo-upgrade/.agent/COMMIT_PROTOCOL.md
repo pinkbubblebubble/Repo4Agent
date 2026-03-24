@@ -1,76 +1,73 @@
 # COMMIT PROTOCOL
-# Run through this checklist after completing EVERY task.
-# Stale metadata costs the next agent 5–10 extra tool calls. Don't skip this.
+# A task is NOT complete until this checklist is done.
+# Treat metadata updates as part of the task, not optional cleanup.
 
 ---
 
-## After ANY code change
+## Decision tree — find your change type, do what it says
 
-### 1. FILES.yaml
-- Did you **add** a new source file?
-  → Add a new entry with: `what`, `exports`, `reads_from`, `writes_to`, `before_editing`
-- Did you **significantly change** an existing file's behavior?
-  → Update its `what`, `writes_to`, or `before_editing` entry
-- Did you **delete** a file?
-  → Remove its entry
+```
+Added a new source file?
+  → FILES.yaml      : add full entry
+  → MANIFEST.yaml   : add capability entry (if it's a handler)
+  → ROUTES.yaml     : add route entry (if it registers a route)
+  → STATUS.yaml     : add capability with status: working
 
-### 2. ROUTES.yaml
-- Did you **add a new route** in `src/app.ts`?
-  → Add entry with: handler path#function, auth_required, middleware, capability, tests
-- Did you **remove or rename** a route?
-  → Update or remove the entry
+Added a new route in app.ts?
+  → ROUTES.yaml     : add route entry
+  → FILES.yaml      : update app.ts insertion_points if they shifted
 
-### 3. MANIFEST.yaml
-- Did you **add a new capability** (new handler)?
-  → Add entry with: description, handler, contract, side_effects, dependencies, tests
-- Did you **change side effects** of an existing capability?
-  → Update its `side_effects` field
+Modified an existing handler's behavior?
+  → FILES.yaml      : update what / writes_to / before_editing if changed
+  → MANIFEST.yaml   : update side_effects if changed
+  → STATUS.yaml     : update status if capability is now working/broken
 
-### 4. INVARIANTS.md
-- Did you **fix a known violation**?
-  → Change `CURRENT STATUS: VIOLATED` to `CURRENT STATUS: RESOLVED`
-  → Add `RESOLVED_IN: <file>` line
-- Did you **discover a new constraint**?
-  → Add a new `INV-XXX` entry with WHAT, WHY, HOW, TEST, NEVER
+Fixed a known bug (INV-XXX)?
+  → INVARIANTS.md   : change STATUS to ✅ RESOLVED, add RESOLVED_IN field
+  → FILES.yaml      : remove or update the known_issues entry on that file
+  → STATUS.yaml     : update capability status to working
 
-### 5. IMPACT_MAP.yaml
-- Did you **create a new dependency** between files?
-  → Add the dependency to the relevant file entries
-- Did you **change the interface** of `src/_shared/db.ts`?
-  → Update every file that imports from it
+Discovered a new constraint or bug?
+  → INVARIANTS.md   : add new INV-XXX entry
+  → FILES.yaml      : add to before_editing on the relevant file
+  → STATUS.yaml     : mark capability as broken with broken_because
 
-### 6. CONCEPTS.yaml
-- Did you **implement something** that was listed as `NOT IMPLEMENTED`?
-  → Update `status` and add `primary_files`
-- Did you **add a new domain concept**?
-  → Add an entry
+Added or changed tests?
+  → TEST_CONTRACTS.yaml : update the contract for that capability
 
-### 7. CHANGELOG.agent.yaml
-**Always append an entry.** Even for small changes.
+Changed src/_shared/db.ts interface?
+  → IMPACT_MAP.yaml : update affected entries
+  → FILES.yaml      : update db.ts missing_methods if resolved
+
+Added a new code pattern?
+  → PATTERNS.yaml   : add template entry
+
+Ran npm test?
+  → STATUS.yaml     : update tests.last_run, tests.passing, tests.failing
+```
+
+---
+
+## Always — after every task
+
+Append to `CHANGELOG.agent.yaml`:
 
 ```yaml
-- date: YYYY-MM-DD
-  task: "<one-line description of what you were asked to do>"
-  files_modified:
-    - path/to/file.ts
-  files_created:
-    - path/to/new/file.ts
+- date: "YYYY-MM-DD"
+  task: "<one sentence: what you were asked to do>"
+  files_modified: []
+  files_created: []
   capabilities_added: []
   capabilities_modified: []
   invariants_resolved: []
   invariants_introduced: []
-  metadata_updated: [FILES.yaml, ROUTES.yaml]  # list what you updated
+  metadata_updated: []  # list every .agent/ file you updated
+  notes: ~              # anything the next agent should know
 ```
 
 ---
 
-## Quick decision tree
+## Why this matters
 
-```
-Added new file?           → FILES.yaml + (MANIFEST if handler) + (ROUTES if route)
-Added new route?          → ROUTES.yaml + FILES.yaml(app.ts) + MANIFEST.yaml
-Fixed INV-XXX?            → INVARIANTS.md + FILES.yaml(before_editing of fixed file)
-Changed db.ts interface?  → IMPACT_MAP.yaml + FILES.yaml(db.ts)
-Implemented new concept?  → CONCEPTS.yaml
-Any of the above?         → CHANGELOG.agent.yaml (always)
-```
+Each skipped update costs the next agent 5–10 extra tool calls to reconstruct what you already knew.
+The metadata is only valuable if it reflects the current state of the code.

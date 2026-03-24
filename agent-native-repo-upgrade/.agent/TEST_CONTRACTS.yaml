@@ -1,0 +1,178 @@
+# TEST_CONTRACTS.yaml
+# Exact assertions for every test. Read this BEFORE writing code, not after tests fail.
+# If you know what the test expects, you can write correct code on the first attempt.
+# Update this file whenever you add or modify tests.
+
+version: "2.0"
+test_cmd: "npm test"
+test_file_pattern: "src/**/*.test.ts"
+
+# ── HOW TO USE ────────────────────────────────────────────────────────────────
+# 1. Find the capability you're implementing (e.g. user.create)
+# 2. Read its contract: status, body shape, side_effects, failure_cases
+# 3. Write code to match — do not open the test file unless something is unclear
+# ─────────────────────────────────────────────────────────────────────────────
+
+contracts:
+
+  # ── User ──────────────────────────────────────────────────────────────────
+
+  user.create:
+    test_file: "src/user/user.test.ts"
+    success:
+      method: POST
+      path: /users
+      input: { email: "test@example.com", password: "secret123", name: "Alice" }
+      expects_status: 201
+      expects_body:
+        id: string        # generated, format: any non-empty string
+        email: string     # must match input
+        name: string      # must match input
+        ABSENT: [password]  # password field must NOT appear in response
+      side_effects:
+        - "userStore.size increases by 1"
+        - "stored user has hashed password (stored !== input)"
+    failure_cases:
+      duplicate_email:
+        input: { email: "existing@example.com", password: "x", name: "Bob" }
+        expects_status: 409
+        expects_body: { error: string }
+      missing_fields:
+        expects_status: 400
+        expects_body: { error: string }
+
+  user.get:
+    test_file: "src/user/user.test.ts"
+    success:
+      method: GET
+      path: /users/:id
+      headers: { Authorization: "Bearer <valid_token>" }
+      expects_status: 200
+      expects_body:
+        id: string
+        email: string
+        name: string
+        ABSENT: [password]
+    failure_cases:
+      not_found:
+        expects_status: 404
+        expects_body: { error: string }
+      unauthorized:
+        headers: {}
+        expects_status: 401
+
+  user.list:
+    test_file: "src/user/user.test.ts"
+    success:
+      method: GET
+      path: /users
+      headers: { Authorization: "Bearer <valid_token>" }
+      expects_status: 200
+      expects_body: "array of User objects — each must have ABSENT: [password]"
+    with_filter:
+      path: "/users?email=target@example.com"
+      expects_body: "array containing only users matching that exact email"
+      empty_match: "returns [], not 404"
+    failure_cases:
+      unauthorized:
+        expects_status: 401
+
+  user.update:
+    test_file: "src/user/user.test.ts"
+    success:
+      method: PATCH
+      path: /users/:id
+      headers: { Authorization: "Bearer <valid_token>" }
+      input: { email: "new@example.com" }
+      expects_status: 200
+      expects_body:
+        id: string        # unchanged
+        email: string     # updated to new value
+        ABSENT: [password]
+      side_effects:
+        - "userStore entry updated in place"
+    failure_cases:
+      not_found: { expects_status: 404 }
+      unauthorized: { expects_status: 401 }
+      patch_password:
+        input: { password: "hack" }
+        expects_status: 400    # password updates rejected here
+
+  user.delete:
+    test_file: "src/user/user.test.ts"
+    success:
+      method: DELETE
+      path: /users/:id
+      headers: { Authorization: "Bearer <valid_token>" }
+      expects_status: 204
+      expects_body: null    # no body on 204
+      side_effects:
+        - "userStore.has(userId) === false"
+        - "[INV-002 FIX] sessionStore has no sessions for this userId"
+    failure_cases:
+      not_found: { expects_status: 404 }
+      unauthorized: { expects_status: 401 }
+    post_delete_session_test:
+      description: "After delete, existing token for that user must be rejected"
+      steps:
+        - "login → get token"
+        - "delete user"
+        - "GET /users/:id with old token → expect 401"
+
+  # ── Auth ──────────────────────────────────────────────────────────────────
+
+  auth.login:
+    test_file: "src/auth/auth.test.ts"
+    success:
+      method: POST
+      path: /auth/login
+      input: { email: "test@example.com", password: "secret123" }
+      expects_status: 200
+      expects_body:
+        token: string       # access token, non-empty
+        refreshToken: string  # refresh token, non-empty
+      side_effects:
+        - "sessionStore.size increases by 1"
+        - "session keyed by token, contains userId"
+    failure_cases:
+      wrong_password:
+        expects_status: 401
+        expects_body: { error: string }
+      user_not_found:
+        expects_status: 401   # same response as wrong password — no user enumeration
+
+  auth.logout:
+    test_file: "src/auth/auth.test.ts"
+    success:
+      method: POST
+      path: /auth/logout
+      headers: { Authorization: "Bearer <valid_token>" }
+      expects_status: 204
+      expects_body: null
+      side_effects:
+        - "session deleted from sessionStore"
+        - "subsequent requests with same token → 401"
+    failure_cases:
+      unauthorized: { expects_status: 401 }
+
+  auth.refresh:
+    test_file: "src/auth/auth.test.ts"
+    success:
+      method: POST
+      path: /auth/refresh
+      input: { refreshToken: "<valid_refresh_token>" }
+      expects_status: 200
+      expects_body:
+        token: string         # new access token
+        refreshToken: string  # new refresh token (rotated)
+      side_effects:
+        - "old refreshToken is invalidated"
+        - "new session entry in sessionStore"
+        - "sessionStore.size stays same (old deleted, new added)"
+    failure_cases:
+      invalid_refresh_token:
+        expects_status: 401
+        expects_body: { error: string }
+      reuse_old_refresh_token:
+        description: "Using the old refresh token after rotation must fail"
+        expects_status: 401

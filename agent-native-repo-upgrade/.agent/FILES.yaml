@@ -1,7 +1,8 @@
 # FILES.yaml — Complete Source File Index
-# Every source file is listed here. Use this instead of glob/grep to locate files.
-# After adding or significantly modifying a file, update its entry.
-# Format: path → { what, exports, reads_from, writes_to, routes, before_editing }
+# Use this instead of glob/grep to locate files.
+# key_locations: exact line numbers for important symbols — use offset+limit when reading
+# insertion_points: where to add new code without reading the whole file
+# before_editing: constraints you'd miss by just reading the file
 
 version: "2.0"
 
@@ -14,18 +15,20 @@ files:
     exports: [app]
     reads_from: []
     writes_to: []
-    routes_registered:
-      - "POST   /users          → user.create.handler"
-      - "GET    /users          → user.list.handler"
-      - "GET    /users/:id      → user.get.handler"
-      - "PATCH  /users/:id      → user.update.handler"
-      - "DELETE /users/:id      → user.delete.handler"
-      - "POST   /auth/login     → auth.login.handler"
-      - "POST   /auth/logout    → auth.logout.handler"
-      - "POST   /auth/refresh   → auth.refresh.handler"
+    key_locations:
+      imports_end: ~          # update when you read the actual file
+      middleware_mount: ~
+      routes_start: ~
+      routes_end: ~           # insertion_point for new routes
+      error_handler: ~
+    insertion_points:
+      add_route: "after the last route registration, before error handler"
+      add_middleware: "before route mounting, after existing middleware"
+      add_import: "top of file with other handler imports"
     before_editing:
       - "Adding a route? Also update .agent/ROUTES.yaml and .agent/MANIFEST.yaml"
-      - "Auth middleware is applied per-route — check INV-003 before adding unprotected routes"
+      - "All /users/* routes except POST /users need authMiddleware (INV-003)"
+      - "Route order matters in Express — specific paths before parameterized ones"
 
   # ── User Domain ────────────────────────────────────────────────────────────
 
@@ -35,113 +38,148 @@ files:
     reads_from: []
     writes_to: []
     before_editing:
-      - "Changing a type here breaks every handler that imports it — run npm test immediately"
-      - "Never remove fields from User without checking all consumers in FILES.yaml"
+      - "Changing a type here affects every handler — run npm test immediately after"
+      - "Never add password to any output type"
 
   src/user/user.create.handler.ts:
-    what: "Creates a new user with bcrypt-hashed password, stores in userStore"
+    what: "POST /users — creates user, bcrypt-hashes password, stores in userStore"
     exports: [createUser]
     reads_from: [userStore]
     writes_to: [userStore]
+    key_locations:
+      password_hash: ~        # line where bcrypt.hash is called
+      store_write: ~          # line where userStore.set is called
     before_editing:
-      - "INV-001: password MUST be bcrypt-hashed before write — never store plaintext"
-      - "Email uniqueness check must happen before insert"
-      - "Tests: src/user/user.test.ts#create"
+      - "INV-001: password MUST be bcrypt-hashed (saltRounds >= 10) before write"
+      - "Strip password from response — see PATTERNS.yaml#strip_password"
+      - "Test contract: TEST_CONTRACTS.yaml#user.create"
 
   src/user/user.get.handler.ts:
-    what: "Retrieves a single user by ID from userStore"
+    what: "GET /users/:id — retrieves single user by ID, strips password"
     exports: [getUser]
     reads_from: [userStore]
     writes_to: []
     before_editing:
-      - "INV-001: never return the password field in the response"
-      - "Tests: src/user/user.test.ts#get"
+      - "INV-001: strip password from response"
+      - "Test contract: TEST_CONTRACTS.yaml#user.get"
 
   src/user/user.list.handler.ts:
-    what: "Returns all users; supports optional ?email= filter"
+    what: "GET /users — returns all users, optional ?email= filter, strips passwords"
     exports: [listUsers]
     reads_from: [userStore]
     writes_to: []
     before_editing:
-      - "INV-001: strip password field from every user in the list"
-      - "Tests: src/user/user.test.ts#list"
+      - "INV-001: strip password from every user in array"
+      - "Empty filter match returns [], not 404"
+      - "Test contract: TEST_CONTRACTS.yaml#user.list"
 
   src/user/user.update.handler.ts:
-    what: "Updates allowed user fields (email, name); rejects password field"
+    what: "PATCH /users/:id — updates email/name fields, rejects password field"
     exports: [updateUser]
     reads_from: [userStore]
     writes_to: [userStore]
     before_editing:
-      - "Do NOT allow password updates here — password change is a separate capability"
-      - "Tests: src/user/user.test.ts#update"
+      - "Explicitly reject password field with 400 (see TEST_CONTRACTS.yaml#user.update)"
+      - "Strip password from response"
+      - "Test contract: TEST_CONTRACTS.yaml#user.update"
 
   src/user/user.delete.handler.ts:
-    what: "Deletes user by ID from userStore"
+    what: "DELETE /users/:id — removes user from userStore"
     exports: [deleteUser]
     reads_from: [userStore]
     writes_to: [userStore]
+    status: broken   # cross-ref STATUS.yaml
     known_issues:
-      - "INV-002: does NOT invalidate active sessions — this is a security bug"
+      - "INV-002: does NOT invalidate sessions — active security bug"
     before_editing:
-      - "INV-002: FIX REQUIRED — after deleting user, call sessionStore.deleteByUserId(userId)"
-      - "After fix, also update INVARIANTS.md to mark INV-002 as resolved"
-      - "Tests: src/user/user.test.ts#delete AND src/auth/auth.test.ts (post-delete session test)"
+      - "INV-002 FIX: after userStore.delete(userId), call sessionStore.deleteByUserId(userId)"
+      - "sessionStore.deleteByUserId() may not exist yet — check src/_shared/db.ts first"
+      - "After fix: update STATUS.yaml (user.delete → working) and INVARIANTS.md (INV-002 → RESOLVED)"
+      - "Test contract: TEST_CONTRACTS.yaml#user.delete (includes post-delete session test)"
 
   # ── Auth Domain ────────────────────────────────────────────────────────────
 
   src/auth/auth.contract.ts:
-    what: "TypeScript interfaces for auth operation inputs/outputs"
+    what: "TypeScript interfaces for auth operations"
     exports: [LoginInput, LogoutInput, RefreshInput, Session, TokenPair]
     reads_from: []
     writes_to: []
     before_editing:
-      - "Changing Session or TokenPair breaks authMiddleware and all auth handlers"
+      - "Changing Session or TokenPair breaks authMiddleware — update together"
 
   src/auth/auth.login.handler.ts:
-    what: "Validates credentials, creates session, returns token"
+    what: "POST /auth/login — validates credentials, creates session, returns TokenPair"
     exports: [login]
     reads_from: [userStore]
     writes_to: [sessionStore]
     before_editing:
-      - "Token format change → update auth.contract.ts AND authMiddleware.ts"
-      - "Tests: src/auth/auth.test.ts#login"
+      - "Same 401 response for wrong password AND user not found (no user enumeration)"
+      - "Test contract: TEST_CONTRACTS.yaml#auth.login"
 
   src/auth/auth.logout.handler.ts:
-    what: "Invalidates session by token"
+    what: "POST /auth/logout — deletes session by token"
     exports: [logout]
     reads_from: [sessionStore]
     writes_to: [sessionStore]
     before_editing:
-      - "Tests: src/auth/auth.test.ts#logout"
+      - "Test contract: TEST_CONTRACTS.yaml#auth.logout"
 
   src/auth/auth.refresh.handler.ts:
-    what: "Issues a new token given a valid refresh token"
+    what: "POST /auth/refresh — rotates token pair, invalidates old refresh token"
     exports: [refreshToken]
     reads_from: [sessionStore]
     writes_to: [sessionStore]
     before_editing:
-      - "Refresh token rotation: old token MUST be invalidated on successful refresh"
-      - "Tests: src/auth/auth.test.ts#refresh"
+      - "Token rotation: delete old session, create new one atomically"
+      - "Old refresh token must be invalid after successful refresh"
+      - "Test contract: TEST_CONTRACTS.yaml#auth.refresh"
 
   # ── Shared ─────────────────────────────────────────────────────────────────
 
   src/_shared/db.ts:
-    what: "In-memory data stores (userStore, sessionStore) and helper functions"
+    what: "In-memory stores (userStore, sessionStore) and generateId()"
     exports: [userStore, sessionStore, generateId]
     reads_from: []
     writes_to: [userStore, sessionStore]
+    key_locations:
+      userStore_declaration: ~
+      sessionStore_declaration: ~
+      generateId: ~
+    missing_methods:
+      - "sessionStore.deleteByUserId(userId: string): void — needed for INV-002 fix"
     before_editing:
-      - "This is the single data layer — ALL handlers depend on it"
-      - "Changing store interfaces breaks every handler — check IMPACT_MAP.yaml first"
-      - "sessionStore must expose deleteByUserId(userId) for INV-002 fix"
-      - "Tests: all tests touch this indirectly — run npm test after any change"
+      - "ALL handlers import from here — any interface change is breaking"
+      - "Add deleteByUserId to sessionStore as a method, not a standalone function"
+      - "Run full npm test after any change here"
 
   src/_shared/authMiddleware.ts:
-    what: "Express middleware — validates session token from Authorization header"
+    what: "Express middleware — validates Bearer token, injects req.userId"
     exports: [authMiddleware]
     reads_from: [sessionStore]
     writes_to: []
+    key_locations:
+      token_extraction: ~     # line that reads Authorization header
+      session_lookup: ~       # line that queries sessionStore
+      userId_injection: ~     # line that sets req.userId
     before_editing:
-      - "INV-003: this is the single auth gate for all protected routes"
-      - "Token validation logic change → test all protected routes"
-      - "Tests: src/auth/auth.test.ts (unauthorized access cases)"
+      - "req.userId is how handlers know who is making the request — do not remove"
+      - "Returning 401 here affects every protected route test"
+
+  # ── Tests ──────────────────────────────────────────────────────────────────
+
+  src/user/user.test.ts:
+    what: "Tests for all /users/* routes"
+    exports: []
+    reads_from: []
+    writes_to: []
+    before_editing:
+      - "See PATTERNS.yaml#new_test for the test structure used here"
+      - "beforeEach resets stores — each test starts clean"
+
+  src/auth/auth.test.ts:
+    what: "Tests for all /auth/* routes"
+    exports: []
+    reads_from: []
+    writes_to: []
+    before_editing:
+      - "See PATTERNS.yaml#new_test for the test structure used here"
