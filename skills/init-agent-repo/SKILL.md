@@ -1,6 +1,7 @@
 ---
 name: init-agent-repo
 description: Transform any repository into an agent-native structure. Generates AGENT.md, .agent/MANIFEST.yaml, .agent/INVARIANTS.md, .agent/IMPACT_MAP.yaml, and .agent/TEST_CONTRACTS.yaml — the 5-file metadata layer proven to improve AI agent task success rates by 30+ percentage points. Use when starting a new project or upgrading an existing repo for AI agent workflows.
+version: 1.0.0
 ---
 
 You are executing the `/init-agent-repo` skill. Your job is to analyze the current repository and generate an **agent-native metadata layer** — a set of structured files that dramatically improve AI agent performance on this codebase.
