@@ -1,0 +1,20 @@
+{
+  "version": "1.0.0",
+  "title": "Repo4Agent",
+  "description": "Agent-native repository design — 5-file metadata layer that improves AI agent task success by 30+ percentage points.",
+  "owner": {
+    "name": "pinkbubblebubble",
+    "url": "https://github.com/pinkbubblebubble"
+  },
+  "plugins": [
+    {
+      "name": "repo4agent",
+      "description": "Run /repo4agent:init-agent-repo to generate AGENT.md, MANIFEST.yaml, INVARIANTS.md, IMPACT_MAP.yaml, and TEST_CONTRACTS.yaml for any codebase.",
+      "version": "1.0.0",
+      "source": {
+        "source": "github",
+        "repo": "pinkbubblebubble/Repo4Agent"
+      }
+    }
+  ]
+}

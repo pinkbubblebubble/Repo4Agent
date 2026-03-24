@@ -1,0 +1,11 @@
+{
+  "name": "repo4agent",
+  "description": "Generate a 5-file agent-native metadata layer for any repository. Proven to improve AI agent task success rates by 30+ percentage points.",
+  "version": "1.0.0",
+  "author": {
+    "name": "pinkbubblebubble",
+    "url": "https://github.com/pinkbubblebubble/Repo4Agent"
+  },
+  "homepage": "https://github.com/pinkbubblebubble/Repo4Agent",
+  "license": "MIT"
+}
