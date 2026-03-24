@@ -20,7 +20,7 @@ RESULTS_DIR = BASE_DIR / "experiment" / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 RESULTS_FILE = RESULTS_DIR / "raw_results.jsonl"
 # Tasks already completed in previous runs (skip them)
-SKIP_TASK_IDS = {"task-a", "task-b", "task-c"}  # set to empty set to re-run all
+SKIP_TASK_IDS = set()  # run all tasks for v2 comparison
 
 SUFFIX = (
     " Work only within the current repository directory. "
@@ -127,7 +127,8 @@ TASKS = [
     },
 ]
 
-REPOS = ["traditional", "agent-native"]
+# For v2 experiment: only run the new v2 repo (traditional + v1 results already in raw_results.jsonl)
+REPOS = ["agent-native-v2"]
 RUNS_PER_TASK = 2
 
 
